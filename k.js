@@ -8,7 +8,7 @@
     var currentFilter = 'all';
     var loading = false;
 
-    var ICON = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h16v16H4z"/></svg>';
+    var ICON = '<svg width="239" height="239" viewBox="0 0 239 239" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M215 121.415l-99.297-6.644 90.943 36.334a106.416 106.416 0 0 0 8.354-29.69z"/><path fill="currentColor" d="M194.608 171.609C174.933 197.942 143.441 215 107.948 215 48.33 215 0 166.871 0 107.5 0 48.13 48.33 0 107.948 0c35.559 0 67.102 17.122 86.77 43.539l-90.181 48.07L162.57 32.25h-32.169L90.892 86.862V32.25H64.77v150.5h26.123v-54.524l39.509 54.524h32.169l-56.526-57.493 88.564 46.352z"/><path fill="currentColor" d="M206.646 63.895l-90.308 36.076L215 93.583a106.396 106.396 0 0 0-8.354-29.688z"/></svg>';
     var STYLE_ID = 'kp-sync-style-v2';
 
     function addStyles() {
@@ -414,20 +414,23 @@
     }
 
     function visibleItems() {
+    return allItems.filter(function (item) {
+        var type = String(item.type || '').toLowerCase();
+
         if (currentFilter === 'movies') {
-            return allItems.filter(function (x) {
-                return x.type === 'Film';
-            });
+            return type === 'film' || type === 'movie';
         }
 
         if (currentFilter === 'series') {
-            return allItems.filter(function (x) {
-                return x.type === 'TvSeries' || x.type === 'MiniSeries';
-            });
+            return type === 'tvseries' ||
+                   type === 'miniseries' ||
+                   type === 'tv' ||
+                   type === 'series';
         }
 
-        return allItems;
-    }
+        return true;
+    });
+}
 
     function renderGrid() {
         if (!overlay) return;
@@ -530,25 +533,25 @@
     }
 
     function setFilter(filter) {
-        currentFilter = filter;
+    currentFilter = filter;
 
-        if (!overlay) return;
+    if (!overlay) return;
 
-        overlay.querySelectorAll('.kp-filter').forEach(function (button) {
-            var active = button.getAttribute('data-filter') === filter;
+    overlay.querySelectorAll('.kp-filter').forEach(function (button) {
+        var active = button.getAttribute('data-filter') === filter;
 
-            button.classList.toggle('active', active);
-            button.setAttribute('aria-pressed', active ? 'true' : 'false');
-        });
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
 
-        renderGrid();
+    renderGrid();
 
-        var first = overlay.querySelector('.kp-card');
+    var first = overlay.querySelector('.kp-card');
 
-        if (first) {
-            focusElement(first);
-        }
+    if (first) {
+        focusElement(first);
     }
+}
 
     function loadList(force) {
         if (loading || !overlay) return;
@@ -679,7 +682,7 @@
 
         window.kp_sync_watchlist_ready = true;
 
-        Lampa.Menu.addButton(ICON, 'Буду смотреть', openScreen);
+        Lampa.Menu.addButton(ICON, 'Кинопоиск', openScreen);
     }
 
     if (window.appready) {
