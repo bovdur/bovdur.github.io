@@ -2,147 +2,143 @@
 (function () {
     'use strict';
 
-    var PREFIX = '[KP Sync Diagnostic]';
+    if (window.KPSyncScreenDiagnostic) return;
+    window.KPSyncScreenDiagnostic = true;
 
-    if (window.kpSyncDiagnosticLoaded) {
-        console.log(PREFIX, 'Already loaded');
-        return;
-    }
-
-    window.kpSyncDiagnosticLoaded = true;
-
-    function log(title, data) {
-        console.log(PREFIX, title, data || '');
-    }
-
-    function getMethods(obj) {
-        if (!obj) return [];
+    function methods(obj) {
+        if (!obj) return 'Недоступно';
 
         var result = [];
+        var current = obj;
 
         try {
-            var current = obj;
-
             while (current && current !== Object.prototype) {
                 Object.getOwnPropertyNames(current).forEach(function (name) {
                     if (result.indexOf(name) === -1) {
                         result.push(name);
                     }
                 });
-
                 current = Object.getPrototypeOf(current);
             }
-        } catch (e) {}
+        } catch (e) {
+            result.push('ERROR: ' + e.message);
+        }
 
-        return result.sort();
+        return result.sort().join(', ');
     }
 
     function diagnose() {
-        log('========== START ==========');
+        var L = window.Lampa;
+        var report = [];
 
-        log('Environment', {
-            appready: !!window.appready,
-            Lampa: typeof window.Lampa,
-            jQuery: typeof window.$,
-            fetch: typeof window.fetch,
-            XMLHttpRequest: typeof window.XMLHttpRequest,
-            Promise: typeof window.Promise,
-            localStorage: typeof window.localStorage
-        });
-
-        if (!window.Lampa) {
-            log('ERROR', 'Lampa object not found');
-            return;
+        function add(title, value) {
+            report.push('=== ' + title + ' ===\n' + value);
         }
 
-        log('Lampa modules', {
-            Reguest: typeof Lampa.Reguest,
-            Storage: typeof Lampa.Storage,
-            Listener: typeof Lampa.Listener,
-            Noty: typeof Lampa.Noty,
-            Template: typeof Lampa.Template
-        });
+        add('Версия диагностики', '0.3');
 
-        log('Reguest methods', getMethods(Lampa.Reguest));
+        add('Среда', [
+            'User Agent: ' + navigator.userAgent,
+            'Lampa: ' + typeof L,
+            'jQuery: ' + typeof window.$,
+            'Fetch: ' + typeof fetch,
+            'XHR: ' + typeof XMLHttpRequest,
+            'LocalStorage: ' + typeof localStorage
+        ].join('\n'));
 
-        if (Lampa.Reguest) {
+        add('Lampa modules', L ?
+            Object.keys(L).join(', ') : 'Lampa не найден');
+
+        add('Reguest', L ? methods(L.Reguest) : 'Нет Lampa');
+
+        if (L && L.Reguest) {
             try {
-                var request = new Lampa.Reguest();
-                log('Reguest instance methods', getMethods(request));
+                add('Reguest instance', methods(new L.Reguest()));
             } catch (e) {
-                log('Reguest constructor error', e.message);
+                add('Reguest constructor error', e.message);
             }
         }
 
-        log('Storage methods', getMethods(Lampa.Storage));
+        add('Storage', L ? methods(L.Storage) : 'Нет Lampa');
+        add('Listener', L ? methods(L.Listener) : 'Нет Lampa');
+        add('Modal', L ? methods(L.Modal) : 'Нет Lampa');
+        add('Noty', L ? methods(L.Noty) : 'Нет Lampa');
 
-        log('Listener methods', getMethods(Lampa.Listener));
+        add('Глобальные ошибки', window.__kpErrors.join('\n') || 'Нет');
 
-        log('========== FINISHED ==========');
+        var text = report.join('\n\n');
 
-        if (Lampa.Noty && Lampa.Noty.show) {
-            Lampa.Noty.show('KP Sync: диагностика завершена. Смотри консоль.');
-        }
+        var old = document.getElementById('kp-sync-report');
+        if (old) old.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'kp-sync-report';
+
+        overlay.style.cssText =
+            'position:fixed;z-index:999999;top:3%;left:3%;' +
+            'width:94%;height:94%;background:#151515;color:#fff;' +
+            'padding:20px;box-sizing:border-box;overflow:auto;' +
+            'font-size:17px;font-family:monospace;';
+
+        var close = document.createElement('button');
+        close.textContent = 'ЗАКРЫТЬ';
+        close.style.cssText =
+            'font-size:20px;padding:12px 30px;margin-bottom:15px;';
+
+        close.onclick = function () {
+            overlay.remove();
+        };
+
+        var pre = document.createElement('pre');
+        pre.textContent = text;
+        pre.style.cssText =
+            'white-space:pre-wrap;overflow-wrap:anywhere;' +
+            'font-size:14px;line-height:1.5;';
+
+        overlay.appendChild(close);
+        overlay.appendChild(pre);
+        document.body.appendChild(overlay);
     }
 
-    function addMenu() {
-        try {
-            if (!window.$) {
-                log('ERROR', 'jQuery not found');
-                return;
-            }
+    window.__kpErrors = [];
 
-            var menu = $('.menu .menu__list').eq(0);
+    window.addEventListener('error', function (e) {
+        window.__kpErrors.push(
+            'ERROR: ' + e.message + ' | ' + e.filename + ':' + e.lineno
+        );
+    });
 
-            if (!menu.length) {
-                log('ERROR', 'Lampa menu not found');
-                return;
-            }
-
-            var button = $('<li class="menu__item selector">' +
-                '<div class="menu__ico"><span>KP</span></div>' +
-                '<div class="menu__text">KP Sync Diagnostic</div>' +
-                '</li>');
-
-            button.on('hover:enter', diagnose);
-            menu.append(button);
-
-            log('Menu item added');
-
-        } catch (e) {
-            log('MENU ERROR', {
-                message: e.message,
-                stack: e.stack
-            });
-        }
-    }
+    window.addEventListener('unhandledrejection', function (e) {
+        window.__kpErrors.push(
+            'PROMISE: ' + String(e.reason)
+        );
+    });
 
     function init() {
         try {
-            log('Plugin initialized');
+            var menu = $('.menu .menu__list').eq(0);
 
-            if (window.appready) {
-                addMenu();
-            } else {
-                Lampa.Listener.follow('app', function (event) {
-                    if (event.type === 'ready') {
-                        addMenu();
-                    }
-                });
-            }
+            if (!menu.length) return;
+
+            var item = $('<li class="menu__item selector">' +
+                '<div class="menu__ico">KP</div>' +
+                '<div class="menu__text">KP Diagnostic 0.3</div>' +
+                '</li>');
+
+            item.on('hover:enter', diagnose);
+            menu.append(item);
 
         } catch (e) {
-            log('INIT ERROR', {
-                message: e.message,
-                stack: e.stack
-            });
+            console.error('[KP Sync]', e);
         }
     }
 
-    window.KPSyncDiagnostic = {
-        run: diagnose
-    };
-
-    init();
+    if (window.appready) {
+        init();
+    } else if (window.Lampa && Lampa.Listener) {
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') init();
+        });
+    }
 
 })();
