@@ -660,10 +660,13 @@
         document.body.appendChild(overlay);
 
         overlay.querySelectorAll('.kp-filter').forEach(function (button) {
-            button.addEventListener('click', function () {
-                setFilter(button.getAttribute('data-filter'));
-            });
-        });
+            button.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        setFilter(button.getAttribute('data-filter'));
+    });
+});
 
         overlay.querySelector('.kp-refresh').addEventListener('click', function () {
             loadList(true);
