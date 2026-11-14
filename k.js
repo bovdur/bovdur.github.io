@@ -537,9 +537,17 @@
 
     if (!overlay) return;
 
+    var items = visibleItems();
+    var status = overlay.querySelector('.kp-status');
+    var count = overlay.querySelector('.kp-count');
+
+    count.textContent = items.length + ' из ' + allItems.length;
+    status.textContent = 'Фильтр: ' + filter +
+        ' | currentFilter: ' + currentFilter +
+        ' | найдено: ' + items.length;
+
     overlay.querySelectorAll('.kp-filter').forEach(function (button) {
         var active = button.getAttribute('data-filter') === filter;
-
         button.classList.toggle('active', active);
         button.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
@@ -547,10 +555,7 @@
     renderGrid();
 
     var first = overlay.querySelector('.kp-card');
-
-    if (first) {
-        focusElement(first);
-    }
+    if (first) focusElement(first);
 }
 
     function loadList(force) {
