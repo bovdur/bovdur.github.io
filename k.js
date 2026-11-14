@@ -1,51 +1,51 @@
+
 (function () {
     'use strict';
 
-    var URL = 'http://192.168.1.17:8787/health';
+    var SERVER = 'http://192.168.1.17:8787/health';
+    var ICON = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h16v16H4z"/></svg>';
 
-    function showResult(text) {
+    function openTest() {
         Lampa.Modal.open({
             title: 'KP Sync: проверка сервера',
-            html: '<div style="padding:20px;white-space:pre-wrap;word-break:break-word;color:#fff;font-size:18px;">' +
-                text +
-                '</div>',
+            html: '<div id="kp-sync-result" style="padding:20px;color:#fff;font-size:18px;">Проверяем соединение...</div>',
             size: 'large'
         });
-    }
 
-    function startTest() {
-        showResult('Проверяем соединение с Orange Pi...');
-
-        fetch(URL, {
-            method: 'GET',
-            cache: 'no-store'
-        })
-        .then(function (response) {
-            return response.text().then(function (body) {
-                showResult(
-                    'HTTP: ' + response.status +
-                    '\n\nОтвет сервера:\n' + body
-                );
-            });
-        })
-        .catch(function (error) {
-            showResult(
-                'ОШИБКА СОЕДИНЕНИЯ\n\n' +
-                String(error) +
-                '\n\nВозможная причина: блокировка HTTP-запросов или недоступность локального адреса.'
-            );
-        });
-    }
-
-    if (window.Lampa) {
-        Lampa.Component.add('kp_sync_test', function () {
-            return {
-                create: function () {
-                    startTest();
+        fetch(SERVER, { method: 'GET', cache: 'no-store' })
+            .then(function (response) {
+                return response.text().then(function (body) {
+                    var el = document.getElementById('kp-sync-result');
+                    if (el) {
+                        el.textContent = 'HTTP: ' + response.status + '\n\n' + body;
+                    }
+                });
+            })
+            .catch(function (error) {
+                var el = document.getElementById('kp-sync-result');
+                if (el) {
+                    el.textContent = 'Ошибка запроса:\n' + String(error);
                 }
-            };
-        });
+            });
+    }
 
-        startTest();
+    function init() {
+        if (window.kp_sync_test_ready) return;
+        window.kp_sync_test_ready = true;
+
+        if (!Lampa.Menu || !Lampa.Menu.addButton) {
+            console.log('KP Sync: Lampa.Menu.addButton unavailable');
+            return;
+        }
+
+        Lampa.Menu.addButton(ICON, 'KP Sync Test', openTest);
+    }
+
+    if (window.appready) {
+        init();
+    } else {
+        Lampa.Listener.follow('app', function (event) {
+            if (event.type === 'ready') init();
+        });
     }
 })();
