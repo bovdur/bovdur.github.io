@@ -193,6 +193,7 @@
     }
 
     document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('keyup', onBackKey, true);
 
     if (previousFocus && document.contains(previousFocus)) {
         previousFocus.focus();
@@ -282,6 +283,7 @@
     if (index + columns < cards.length) {
         next = index + columns;
     } else {
+        focusElement(overlay.querySelector('.kp-close'));
         return;
     }
 }
@@ -316,6 +318,28 @@
         }
     }
 
+function onBackKey(event) {
+    if (!overlay) return;
+
+    var key = event.key;
+    var code = event.keyCode || event.which;
+
+    if (
+        key === 'Escape' ||
+        key === 'Backspace' ||
+        key === 'BrowserBack' ||
+        key === 'GoBack' ||
+        key === 'Back' ||
+        code === 4 ||
+        code === 27 ||
+        code === 10009
+    ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeScreen();
+    }
+}
+    
     function onKey(event) {
         if (!overlay) return;
 
@@ -364,16 +388,23 @@
             var active = document.activeElement;
 
             if (active.classList.contains('kp-card')) {
-                navigateGrid(direction);
-            } else if (
-                active.classList.contains('kp-filter') ||
-                active.classList.contains('kp-refresh')
-            ) {
-                navigateFilters(direction);
-            } else if (direction === 'down') {
-                var cards = getCards();
-                if (cards.length) focusElement(cards[0]);
-            }
+    navigateGrid(direction);
+} else if (
+    active.classList.contains('kp-filter') ||
+    active.classList.contains('kp-refresh')
+) {
+    navigateFilters(direction);
+} else if (active.classList.contains('kp-close')) {
+    if (direction === 'up') {
+        var cards = getCards();
+        if (cards.length) {
+            focusElement(cards[cards.length - 1]);
+        }
+    }
+} else if (direction === 'down') {
+    var cards = getCards();
+    if (cards.length) focusElement(cards[0]);
+}
 
             return;
         }
@@ -692,6 +723,7 @@
 });
 
         document.addEventListener('keydown', onKey, true);
+        window.addEventListener('keyup', onBackKey, true);
 
         focusElement(overlay.querySelector('.kp-filter.active'));
 
