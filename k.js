@@ -2,200 +2,160 @@
 (function () {
     'use strict';
 
-    var VERSION = '0.5';
+    if (window.KPNetworkTestLoaded) return;
+    window.KPNetworkTestLoaded = true;
 
-    if (window.KPSyncDiagnosticLoaded) return;
-    window.KPSyncDiagnosticLoaded = true;
-
-    function methods(obj) {
-        if (!obj) return 'Недоступно';
-
-        var result = [];
-        var current = obj;
-
-        try {
-            while (current && current !== Object.prototype) {
-                Object.getOwnPropertyNames(current).forEach(function (name) {
-                    if (result.indexOf(name) === -1) {
-                        result.push(name);
-                    }
-                });
-                current = Object.getPrototypeOf(current);
-            }
-        } catch (e) {
-            result.push('ERROR: ' + e.message);
-        }
-
-        return result.sort().join(', ');
-    }
-
-    function diagnose() {
-        var L = window.Lampa;
-        var report = [];
-
-        function add(title, value) {
-            report.push('=== ' + title + ' ===\n' + value);
-        }
-
-        add('Версия', VERSION);
-
-        add('Среда', [
-            'User Agent: ' + navigator.userAgent,
-            'Lampa: ' + typeof L,
-            'jQuery: ' + typeof window.$,
-            'Fetch: ' + typeof window.fetch,
-            'XHR: ' + typeof window.XMLHttpRequest,
-            'LocalStorage: ' + typeof window.localStorage
-        ].join('\n'));
-
-        add('Lampa modules',
-            L ? Object.keys(L).join(', ') : 'Lampa не найдена');
-
-        add('Reguest', L ? methods(L.Reguest) : 'Нет Lampa');
-
-        if (L && L.Reguest) {
-            try {
-                add('Reguest instance', methods(new L.Reguest()));
-            } catch (e) {
-                add('Reguest error', e.message);
-            }
-        }
-
-        add('Storage', L ? methods(L.Storage) : 'Нет Lampa');
-        add('Listener', L ? methods(L.Listener) : 'Нет Lampa');
-        add('Modal', L ? methods(L.Modal) : 'Нет Lampa');
-        add('Noty', L ? methods(L.Noty) : 'Нет Lampa');
-        add('Ошибки', window.__kpErrors.join('\n') || 'Нет');
-
-        var old = document.getElementById('kp-sync-report');
+    function showReport(text) {
+        var old = document.getElementById('kp-net-report');
         if (old) old.remove();
 
-        var overlay = document.createElement('div');
-        overlay.id = 'kp-sync-report';
-        overlay.tabIndex = -1;
+        var box = document.createElement('div');
+        box.id = 'kp-net-report';
 
-        overlay.style.cssText =
-            'position:fixed;z-index:2147483647;' +
-            'top:0;left:0;width:100%;height:100%;' +
-            'background:#151515;color:white;' +
-            'padding:25px;box-sizing:border-box;' +
-            'display:flex;flex-direction:column;overflow:hidden;';
+        box.style.cssText =
+            'position:fixed;z-index:999999;inset:0;' +
+            'background:#151515;color:white;padding:25px;' +
+            'display:flex;flex-direction:column;';
 
         var close = document.createElement('button');
         close.textContent = 'ЗАКРЫТЬ';
-        close.style.cssText =
-            'font-size:22px;padding:15px 30px;' +
-            'margin-bottom:15px;flex-shrink:0;';
+        close.style.cssText = 'padding:15px;font-size:22px;';
 
         var pre = document.createElement('pre');
-        pre.textContent = report.join('\n\n');
+        pre.textContent = text;
         pre.style.cssText =
-            'flex:1;overflow:hidden;white-space:pre-wrap;' +
-            'overflow-wrap:anywhere;font-size:16px;' +
-            'line-height:1.5;margin:0;color:white;';
+            'overflow:auto;white-space:pre-wrap;' +
+            'font-size:16px;line-height:1.5;flex:1;';
 
-        overlay.appendChild(close);
-        overlay.appendChild(pre);
-        document.body.appendChild(overlay);
+        box.appendChild(close);
+        box.appendChild(pre);
+        document.body.appendChild(box);
 
         function remove() {
-            document.removeEventListener('keydown', keyHandler, true);
-            overlay.remove();
+            document.removeEventListener('keydown', keys, true);
+            box.remove();
         }
 
-        function keyHandler(e) {
-            var key = e.key;
-            var code = e.keyCode;
-
-            if (
-                key === 'Escape' || key === 'Backspace' ||
-                code === 4 || code === 27 || code === 8
-            ) {
+        function keys(e) {
+            if (['Escape', 'Backspace'].indexOf(e.key) >= 0 ||
+                e.keyCode === 4) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 remove();
-                return;
-            }
-
-            if (
-                key === 'ArrowDown' || key === 'ArrowUp' ||
-                key === 'PageDown' || key === 'PageUp'
-            ) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-
-                pre.scrollTop +=
-                    key === 'ArrowDown' ? 100 :
-                    key === 'ArrowUp' ? -100 :
-                    key === 'PageDown' ? 400 : -400;
-
-                return;
-            }
-
-            if (key === 'Enter' || code === 23 || code === 66) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-
-                if (document.activeElement === close) remove();
             }
         }
 
-        document.addEventListener('keydown', keyHandler, true);
-
+        document.addEventListener('keydown', keys, true);
         close.onclick = remove;
         close.focus();
-
-        window.KPSyncReport = {
-            text: report.join('\n\n'),
-            close: remove
-        };
     }
 
-    window.__kpErrors = [];
+    function runTests() {
+        var results = [
+            'KP NETWORK TEST 1.0',
+            'Проверка нативного HTTP Lampa',
+            '==============================',
+            ''
+        ];
 
-    window.addEventListener('error', function (e) {
-        window.__kpErrors.push(
-            e.message + ' (' + e.filename + ':' + e.lineno + ')'
-        );
-    });
+        showReport('Запуск тестов...\nПодожди завершения запросов.');
 
-    window.addEventListener('unhandledrejection', function (e) {
-        window.__kpErrors.push('Promise: ' + String(e.reason));
-    });
+        function finish() {
+            showReport(results.join('\n'));
+        }
 
-    function init() {
-        try {
-            if (!window.$ || !window.Lampa) return;
+        function test(url, name, next) {
+            results.push('Проверка: ' + name);
+            results.push('URL: ' + url);
 
-            var menu = $('.menu .menu__list').eq(0);
+            var req = new Lampa.Reguest();
+            req.timeout(20000);
 
-            if (!menu.length) {
-                console.error('[KP Sync] Menu not found');
-                return;
+            var done = false;
+
+            function complete(status, data) {
+                if (done) return;
+                done = true;
+
+                results.push('Результат: ' + status);
+
+                if (data !== undefined) {
+                    var output;
+
+                    try {
+                        output = typeof data === 'string'
+                            ? data
+                            : JSON.stringify(data);
+                    } catch (e) {
+                        output = String(data);
+                    }
+
+                    results.push(
+                        'Ответ: ' + String(output).substring(0, 600)
+                    );
+                }
+
+                results.push('');
+                next();
             }
 
-            if ($('#kp-sync-menu').length) return;
+            try {
+                req.native(
+                    url,
+                    function (data) {
+                        complete('SUCCESS', data);
+                    },
+                    function (error) {
+                        var message;
 
-            var item = $(
-                '<li id="kp-sync-menu" class="menu__item selector">' +
-                '<div class="menu__ico">KP</div>' +
-                '<div class="menu__text">KP Diagnostic ' +
-                VERSION + '</div></li>'
-            );
+                        try {
+                            message = JSON.stringify(error);
+                        } catch (e) {
+                            message = String(error);
+                        }
 
-            item.on('hover:enter', diagnose);
-            menu.append(item);
-
-            console.log('[KP Sync] Initialized', VERSION);
-
-        } catch (e) {
-            console.error('[KP Sync] Init error', e);
+                        complete('ERROR', message);
+                    },
+                    false,
+                    { dataType: 'text' }
+                );
+            } catch (e) {
+                complete('EXCEPTION', e.message);
+            }
         }
+
+        test(
+            'https://httpbin.org/json',
+            'Контрольный сервер HTTPBin',
+            function () {
+                test(
+                    'https://www.kinopoisk.ru/',
+                    'Сайт Кинопоиска',
+                    finish
+                );
+            }
+        );
+    }
+
+    function init() {
+        var menu = $('.menu .menu__list').eq(0);
+
+        if (!menu.length || $('#kp-network-test').length) return;
+
+        var item = $(
+            '<li id="kp-network-test" class="menu__item selector">' +
+            '<div class="menu__ico">KP</div>' +
+            '<div class="menu__text">KP Network Test</div>' +
+            '</li>'
+        );
+
+        item.on('hover:enter', runTests);
+        menu.append(item);
     }
 
     if (window.appready) {
         init();
-    } else if (window.Lampa && Lampa.Listener) {
+    } else {
         Lampa.Listener.follow('app', function (e) {
             if (e.type === 'ready') init();
         });
