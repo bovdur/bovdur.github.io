@@ -7,8 +7,8 @@
     var allItems = [];
     var currentFilter = 'all';
     var loading = false;
-    var historyGuard = false;
-    var closePending = false;
+    var suppressBackKey = false;
+    var suppressBackTimer = null;
 
     var ICON = '<svg width="239" height="239" viewBox="0 0 239 239" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M215 121.415l-99.297-6.644 90.943 36.334a106.416 106.416 0 0 0 8.354-29.69z"/><path fill="currentColor" d="M194.608 171.609C174.933 197.942 143.441 215 107.948 215 48.33 215 0 166.871 0 107.5 0 48.13 48.33 0 107.948 0c35.559 0 67.102 17.122 86.77 43.539l-90.181 48.07L162.57 32.25h-32.169L90.892 86.862V32.25H64.77v150.5h26.123v-54.524l39.509 54.524h32.169l-56.526-57.493 88.564 46.352z"/><path fill="currentColor" d="M206.646 63.895l-90.308 36.076L215 93.583a106.396 106.396 0 0 0-8.354-29.688z"/></svg>';
     var STYLE_ID = 'kp-sync-style-v2';
@@ -187,38 +187,11 @@
         document.head.appendChild(style);
     }
 
-    function closeScreen(fromPopState) {
+    function closeScreen() {
         if (!overlay) return;
 
         overlay.remove();
         overlay = null;
-
-        document.removeEventListener('keydown', onKey, true);
-        window.removeEventListener('keyup', onBackKey, true);
-        window.removeEventListener('popstate', onPluginPopState);
-
-        historyGuard = false;
-        closePending = false;
-    }
-
-    function onPluginPopState() {
-        if (overlay) {
-            closeScreen(true);
-        } else {
-            historyGuard = false;
-        }
-    }
-
-    function requestClose() {
-        if (!overlay || closePending) return;
-
-        closePending = true;
-
-        if (historyGuard) {
-            window.history.back();
-        } else {
-            closeScreen(true);
-        }
     }
 
     function focusElement(element) {
@@ -236,6 +209,7 @@
 
     function getCards() {
         if (!overlay) return [];
+
         return Array.prototype.slice.call(
             overlay.querySelectorAll('.kp-card')
         );
@@ -243,6 +217,7 @@
 
     function getFilters() {
         if (!overlay) return [];
+
         return Array.prototype.slice.call(
             overlay.querySelectorAll('.kp-filter, .kp-refresh')
         );
@@ -276,11 +251,16 @@
         var next = index;
 
         if (direction === 'left') {
-            if (index % columns > 0) next = index - 1;
+            if (index % columns > 0) {
+                next = index - 1;
+            }
         }
 
         if (direction === 'right') {
-            if (index + 1 < cards.length && index % columns < columns - 1) {
+            if (
+                index + 1 < cards.length &&
+                index % columns < columns - 1
+            ) {
                 next = index + 1;
             }
         }
@@ -293,6 +273,7 @@
                 var activeFilter = overlay.querySelector(
                     '.kp-filter.active'
                 );
+
                 focusElement(activeFilter || filters[0]);
                 return;
             }
@@ -322,7 +303,9 @@
         }
 
         if (direction === 'left') {
-            if (index > 0) focusElement(filters[index - 1]);
+            if (index > 0) {
+                focusElement(filters[index - 1]);
+            }
         }
 
         if (direction === 'right') {
@@ -333,17 +316,18 @@
 
         if (direction === 'down') {
             var cards = getCards();
-            if (cards.length) focusElement(cards[0]);
+
+            if (cards.length) {
+                focusElement(cards[0]);
+            }
         }
     }
 
-    function onBackKey(event) {
-        if (!overlay) return;
-
+    function isBackKey(event) {
         var key = event.key;
         var code = event.keyCode || event.which;
 
-        if (
+        return (
             key === 'Escape' ||
             key === 'Backspace' ||
             key === 'BrowserBack' ||
@@ -354,36 +338,36 @@
             code === 27 ||
             code === 10009 ||
             code === 461
-        ) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            requestClose();
-        }
+        );
     }
 
+    // Перехватываем Back на window в capture-фазе,
+    // до передачи события обработчикам Lampa.
     function onKey(event) {
         if (!overlay) return;
 
-        var key = event.key;
-        var code = event.keyCode || event.which;
-
-        if (
-            key === 'Escape' ||
-            key === 'Backspace' ||
-            key === 'BrowserBack' ||
-            key === 'GoBack' ||
-            key === 'Back' ||
-            code === 4 ||
-            code === 8 ||
-            code === 27 ||
-            code === 10009 ||
-            code === 461
-        ) {
+        if (isBackKey(event)) {
             event.preventDefault();
+            event.stopPropagation();
             event.stopImmediatePropagation();
-            requestClose();
+
+            suppressBackKey = true;
+
+            if (suppressBackTimer) {
+                clearTimeout(suppressBackTimer);
+            }
+
+            suppressBackTimer = setTimeout(function () {
+                suppressBackKey = false;
+                suppressBackTimer = null;
+            }, 1000);
+
+            closeScreen();
             return;
         }
+
+        var key = event.key;
+        var code = event.keyCode || event.which;
 
         var directions = {
             19: 'up',
@@ -406,6 +390,7 @@
         if (direction) {
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation();
 
             var active = document.activeElement;
 
@@ -419,18 +404,23 @@
             } else if (active.classList.contains('kp-close')) {
                 if (direction === 'up') {
                     var cards = getCards();
+
                     if (cards.length) {
                         focusElement(cards[cards.length - 1]);
                     }
                 }
             } else if (direction === 'down') {
-                var cards = getCards();
-                if (cards.length) focusElement(cards[0]);
+                var firstCards = getCards();
+
+                if (firstCards.length) {
+                    focusElement(firstCards[0]);
+                }
             }
 
             return;
         }
 
+        // OK / Enter / центральная кнопка пульта.
         if (
             key === 'Enter' ||
             key === ' ' ||
@@ -439,12 +429,44 @@
         ) {
             var target = document.activeElement;
 
-            if (overlay.contains(target) && target.tagName === 'BUTTON') {
+            if (
+                overlay.contains(target) &&
+                target.tagName === 'BUTTON'
+            ) {
                 event.preventDefault();
                 event.stopPropagation();
+                event.stopImmediatePropagation();
+
                 target.click();
             }
         }
+    }
+
+    // Некоторые ТВ отправляют Back только в keyup.
+    // Также блокируем keyup после уже обработанного keydown.
+    function onBackKey(event) {
+        if (suppressBackKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            suppressBackKey = false;
+
+            if (suppressBackTimer) {
+                clearTimeout(suppressBackTimer);
+                suppressBackTimer = null;
+            }
+
+            return;
+        }
+
+        if (!overlay || !isBackKey(event)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        closeScreen();
     }
 
     function openCard(item) {
@@ -464,13 +486,7 @@
             card.name = item.title || '';
         }
 
-        if (historyGuard) {
-            historyGuard = false;
-            window.removeEventListener('popstate', onPluginPopState);
-            window.history.back();
-        }
-
-        closeScreen(true);
+        closeScreen();
 
         Lampa.Activity.push({
             id: id,
@@ -490,10 +506,12 @@
             }
 
             if (currentFilter === 'series') {
-                return type === 'tvseries' ||
-                       type === 'miniseries' ||
-                       type === 'tv' ||
-                       type === 'series';
+                return (
+                    type === 'tvseries' ||
+                    type === 'miniseries' ||
+                    type === 'tv' ||
+                    type === 'series'
+                );
             }
 
             return true;
@@ -526,6 +544,7 @@
                 (item.year ? ', ' + item.year : '')
             );
 
+            // Постеры загружаются через локальный прокси Orange Pi.
             var posterUrl = item.tmdb_id
                 ? API.replace(
                     '/api/watchlist',
@@ -606,6 +625,7 @@
 
         overlay.querySelectorAll('.kp-filter').forEach(function (button) {
             var active = button.getAttribute('data-filter') === filter;
+
             button.classList.toggle('active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
@@ -613,7 +633,10 @@
         renderGrid();
 
         var first = overlay.querySelector('.kp-card');
-        if (first) focusElement(first);
+
+        if (first) {
+            focusElement(first);
+        }
     }
 
     function loadList(force) {
@@ -675,6 +698,8 @@
                 }
             })
             .catch(function (error) {
+                if (!overlay) return;
+
                 status.textContent =
                     'Не удалось загрузить список.\n' +
                     String(error) +
@@ -686,18 +711,7 @@
     }
 
     function openScreen() {
-        if (overlay) closeScreen(true);
-
-        window.history.pushState(
-            { kpSyncOverlay: true },
-            '',
-            window.location.href
-        );
-
-        historyGuard = true;
-        closePending = false;
-
-        window.addEventListener('popstate', onPluginPopState);
+        if (overlay) closeScreen();
 
         addStyles();
 
@@ -733,6 +747,7 @@
             button.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
+
                 setFilter(button.getAttribute('data-filter'));
             });
         });
@@ -740,17 +755,17 @@
         overlay.querySelector('.kp-refresh').addEventListener('click', function (event) {
             event.preventDefault();
             event.stopPropagation();
+
             loadList(true);
         });
 
         overlay.querySelector('.kp-close').addEventListener('click', function (event) {
             event.preventDefault();
+            event.stopPropagation();
             event.stopImmediatePropagation();
-            requestClose();
-        });
 
-        document.addEventListener('keydown', onKey, true);
-        window.addEventListener('keyup', onBackKey, true);
+            closeScreen();
+        });
 
         focusElement(overlay.querySelector('.kp-filter.active'));
 
@@ -765,6 +780,11 @@
         }
 
         window.kp_sync_watchlist_ready = true;
+
+        // Регистрируем глобальные обработчики один раз.
+        // Они активны только пока открыт наш каталог.
+        window.addEventListener('keydown', onKey, true);
+        window.addEventListener('keyup', onBackKey, true);
 
         Lampa.Menu.addButton(ICON, 'Кинопоиск', openScreen);
     }
