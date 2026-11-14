@@ -7,7 +7,8 @@
     var allItems = [];
     var currentFilter = 'all';
     var loading = false;
-    var previousFocus = null;
+    var historyGuard = false;
+    var closePending = false;
 
     var ICON = '<svg width="239" height="239" viewBox="0 0 239 239" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M215 121.415l-99.297-6.644 90.943 36.334a106.416 106.416 0 0 0 8.354-29.69z"/><path fill="currentColor" d="M194.608 171.609C174.933 197.942 143.441 215 107.948 215 48.33 215 0 166.871 0 107.5 0 48.13 48.33 0 107.948 0c35.559 0 67.102 17.122 86.77 43.539l-90.181 48.07L162.57 32.25h-32.169L90.892 86.862V32.25H64.77v150.5h26.123v-54.524l39.509 54.524h32.169l-56.526-57.493 88.564 46.352z"/><path fill="currentColor" d="M206.646 63.895l-90.308 36.076L215 93.583a106.396 106.396 0 0 0-8.354-29.688z"/></svg>';
     var STYLE_ID = 'kp-sync-style-v2';
@@ -186,21 +187,39 @@
         document.head.appendChild(style);
     }
 
-    function closeScreen() {
-    if (overlay) {
+    function closeScreen(fromPopState) {
+        if (!overlay) return;
+
         overlay.remove();
         overlay = null;
+
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('keyup', onBackKey, true);
+        window.removeEventListener('popstate', onPluginPopState);
+
+        historyGuard = false;
+        closePending = false;
     }
 
-    document.removeEventListener('keydown', onKey, true);
-    window.removeEventListener('keyup', onBackKey, true);
-
-    if (previousFocus && document.contains(previousFocus)) {
-        previousFocus.focus();
+    function onPluginPopState() {
+        if (overlay) {
+            closeScreen(true);
+        } else {
+            historyGuard = false;
+        }
     }
 
-    previousFocus = null;
-}
+    function requestClose() {
+        if (!overlay || closePending) return;
+
+        closePending = true;
+
+        if (historyGuard) {
+            window.history.back();
+        } else {
+            closeScreen(true);
+        }
+    }
 
     function focusElement(element) {
         if (!element) return;
@@ -280,13 +299,13 @@
         }
 
         if (direction === 'down') {
-    if (index + columns < cards.length) {
-        next = index + columns;
-    } else {
-        focusElement(overlay.querySelector('.kp-close'));
-        return;
-    }
-}
+            if (index + columns < cards.length) {
+                next = index + columns;
+            } else {
+                focusElement(overlay.querySelector('.kp-close'));
+                return;
+            }
+        }
 
         focusElement(cards[next]);
     }
@@ -318,50 +337,53 @@
         }
     }
 
-function onBackKey(event) {
-    if (!overlay) return;
+    function onBackKey(event) {
+        if (!overlay) return;
 
-    var key = event.key;
-    var code = event.keyCode || event.which;
+        var key = event.key;
+        var code = event.keyCode || event.which;
 
-    if (
-        key === 'Escape' ||
-        key === 'Backspace' ||
-        key === 'BrowserBack' ||
-        key === 'GoBack' ||
-        key === 'Back' ||
-        code === 4 ||
-        code === 27 ||
-        code === 10009
-    ) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        closeScreen();
+        if (
+            key === 'Escape' ||
+            key === 'Backspace' ||
+            key === 'BrowserBack' ||
+            key === 'GoBack' ||
+            key === 'Back' ||
+            code === 4 ||
+            code === 8 ||
+            code === 27 ||
+            code === 10009 ||
+            code === 461
+        ) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            requestClose();
+        }
     }
-}
-    
+
     function onKey(event) {
         if (!overlay) return;
 
         var key = event.key;
         var code = event.keyCode || event.which;
 
-        // Кнопка Back на Android TV
         if (
-    key === 'Escape' ||
-    key === 'Backspace' ||
-    key === 'BrowserBack' ||
-    key === 'GoBack' ||
-    key === 'Back' ||
-    code === 4 ||
-    code === 27 ||
-    code === 10009
-) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    closeScreen();
-    return;
-}
+            key === 'Escape' ||
+            key === 'Backspace' ||
+            key === 'BrowserBack' ||
+            key === 'GoBack' ||
+            key === 'Back' ||
+            code === 4 ||
+            code === 8 ||
+            code === 27 ||
+            code === 10009 ||
+            code === 461
+        ) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            requestClose();
+            return;
+        }
 
         var directions = {
             19: 'up',
@@ -388,28 +410,27 @@ function onBackKey(event) {
             var active = document.activeElement;
 
             if (active.classList.contains('kp-card')) {
-    navigateGrid(direction);
-} else if (
-    active.classList.contains('kp-filter') ||
-    active.classList.contains('kp-refresh')
-) {
-    navigateFilters(direction);
-} else if (active.classList.contains('kp-close')) {
-    if (direction === 'up') {
-        var cards = getCards();
-        if (cards.length) {
-            focusElement(cards[cards.length - 1]);
-        }
-    }
-} else if (direction === 'down') {
-    var cards = getCards();
-    if (cards.length) focusElement(cards[0]);
-}
+                navigateGrid(direction);
+            } else if (
+                active.classList.contains('kp-filter') ||
+                active.classList.contains('kp-refresh')
+            ) {
+                navigateFilters(direction);
+            } else if (active.classList.contains('kp-close')) {
+                if (direction === 'up') {
+                    var cards = getCards();
+                    if (cards.length) {
+                        focusElement(cards[cards.length - 1]);
+                    }
+                }
+            } else if (direction === 'down') {
+                var cards = getCards();
+                if (cards.length) focusElement(cards[0]);
+            }
 
             return;
         }
 
-        // OK / Enter / центральная кнопка пульта
         if (
             key === 'Enter' ||
             key === ' ' ||
@@ -443,7 +464,13 @@ function onBackKey(event) {
             card.name = item.title || '';
         }
 
-        closeScreen();
+        if (historyGuard) {
+            historyGuard = false;
+            window.removeEventListener('popstate', onPluginPopState);
+            window.history.back();
+        }
+
+        closeScreen(true);
 
         Lampa.Activity.push({
             id: id,
@@ -455,23 +482,23 @@ function onBackKey(event) {
     }
 
     function visibleItems() {
-    return allItems.filter(function (item) {
-        var type = String(item.type || '').toLowerCase();
+        return allItems.filter(function (item) {
+            var type = String(item.type || '').toLowerCase();
 
-        if (currentFilter === 'movies') {
-            return type === 'film' || type === 'movie';
-        }
+            if (currentFilter === 'movies') {
+                return type === 'film' || type === 'movie';
+            }
 
-        if (currentFilter === 'series') {
-            return type === 'tvseries' ||
-                   type === 'miniseries' ||
-                   type === 'tv' ||
-                   type === 'series';
-        }
+            if (currentFilter === 'series') {
+                return type === 'tvseries' ||
+                       type === 'miniseries' ||
+                       type === 'tv' ||
+                       type === 'series';
+            }
 
-        return true;
-    });
-}
+            return true;
+        });
+    }
 
     function renderGrid() {
         if (!overlay) return;
@@ -499,7 +526,6 @@ function onBackKey(event) {
                 (item.year ? ', ' + item.year : '')
             );
 
-            // Постеры теперь загружаются через локальный прокси Orange Pi
             var posterUrl = item.tmdb_id
                 ? API.replace(
                     '/api/watchlist',
@@ -574,30 +600,21 @@ function onBackKey(event) {
     }
 
     function setFilter(filter) {
-    currentFilter = filter;
+        currentFilter = filter;
 
-    if (!overlay) return;
+        if (!overlay) return;
 
-    var items = visibleItems();
-    var status = overlay.querySelector('.kp-status');
-    var count = overlay.querySelector('.kp-count');
+        overlay.querySelectorAll('.kp-filter').forEach(function (button) {
+            var active = button.getAttribute('data-filter') === filter;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
 
-    count.textContent = items.length + ' из ' + allItems.length;
-    status.textContent = 'Фильтр: ' + filter +
-        ' | currentFilter: ' + currentFilter +
-        ' | найдено: ' + items.length;
+        renderGrid();
 
-    overlay.querySelectorAll('.kp-filter').forEach(function (button) {
-        var active = button.getAttribute('data-filter') === filter;
-        button.classList.toggle('active', active);
-        button.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
-
-    renderGrid();
-
-    var first = overlay.querySelector('.kp-card');
-    if (first) focusElement(first);
-}
+        var first = overlay.querySelector('.kp-card');
+        if (first) focusElement(first);
+    }
 
     function loadList(force) {
         if (loading || !overlay) return;
@@ -669,11 +686,20 @@ function onBackKey(event) {
     }
 
     function openScreen() {
-    closeScreen();
+        if (overlay) closeScreen(true);
 
-    previousFocus = document.activeElement;
+        window.history.pushState(
+            { kpSyncOverlay: true },
+            '',
+            window.location.href
+        );
 
-    addStyles();
+        historyGuard = true;
+        closePending = false;
+
+        window.addEventListener('popstate', onPluginPopState);
+
+        addStyles();
 
         currentFilter = 'all';
         allItems = [];
@@ -705,22 +731,23 @@ function onBackKey(event) {
 
         overlay.querySelectorAll('.kp-filter').forEach(function (button) {
             button.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
+                event.preventDefault();
+                event.stopPropagation();
+                setFilter(button.getAttribute('data-filter'));
+            });
+        });
 
-        setFilter(button.getAttribute('data-filter'));
-    });
-});
-
-        overlay.querySelector('.kp-refresh').addEventListener('click', function () {
+        overlay.querySelector('.kp-refresh').addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
             loadList(true);
         });
 
         overlay.querySelector('.kp-close').addEventListener('click', function (event) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    closeScreen();
-});
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            requestClose();
+        });
 
         document.addEventListener('keydown', onKey, true);
         window.addEventListener('keyup', onBackKey, true);
