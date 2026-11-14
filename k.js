@@ -5,133 +5,175 @@
     if (window.KPNetworkTestLoaded) return;
     window.KPNetworkTestLoaded = true;
 
-    function showReport(text) {
-        var old = document.getElementById('kp-net-report');
-        if (old) old.remove();
+    var pages = [];
+    var current = 0;
+    var overlay;
 
-        var box = document.createElement('div');
-        box.id = 'kp-net-report';
+    function render() {
+        if (!overlay) return;
 
-        box.style.cssText =
-            'position:fixed;z-index:999999;inset:0;' +
-            'background:#151515;color:white;padding:25px;' +
-            'display:flex;flex-direction:column;';
+        overlay.innerHTML = '';
 
-        var close = document.createElement('button');
-        close.textContent = 'ЗАКРЫТЬ';
-        close.style.cssText = 'padding:15px;font-size:22px;';
+        var header = document.createElement('div');
+        header.textContent = 'KP NETWORK TEST 1.1';
+        header.style.cssText = 'font-size:24px;margin-bottom:15px;';
 
-        var pre = document.createElement('pre');
-        pre.textContent = text;
-        pre.style.cssText =
-            'overflow:auto;white-space:pre-wrap;' +
-            'font-size:16px;line-height:1.5;flex:1;';
+        var content = document.createElement('pre');
+        content.textContent = pages[current] || 'Ожидание...';
+        content.style.cssText =
+            'flex:1;white-space:pre-wrap;overflow-wrap:anywhere;' +
+            'font-size:17px;line-height:1.5;margin:0;' +
+            'color:white;overflow:hidden;';
 
-        box.appendChild(close);
-        box.appendChild(pre);
-        document.body.appendChild(box);
+        var controls = document.createElement('div');
+        controls.style.cssText =
+            'display:flex;gap:15px;margin-top:15px;';
 
-        function remove() {
-            document.removeEventListener('keydown', keys, true);
-            box.remove();
+        function button(label, action, disabled) {
+            var b = document.createElement('button');
+            b.textContent = label;
+            b.disabled = !!disabled;
+            b.style.cssText =
+                'flex:1;padding:15px;font-size:19px;';
+            b.onclick = action;
+            controls.appendChild(b);
+            return b;
         }
 
-        function keys(e) {
-            if (['Escape', 'Backspace'].indexOf(e.key) >= 0 ||
-                e.keyCode === 4) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                remove();
+        button('НАЗАД', function () {
+            current = Math.max(0, current - 1);
+            render();
+        }, current === 0);
+
+        var next = button(
+            current === pages.length - 1 ? 'ЗАКРЫТЬ' : 'ДАЛЕЕ',
+            function () {
+                if (current < pages.length - 1) {
+                    current++;
+                    render();
+                } else {
+                    close();
+                }
+            }
+        );
+
+        var counter = document.createElement('div');
+        counter.textContent =
+            'Страница ' + (current + 1) + ' / ' + pages.length;
+        counter.style.cssText =
+            'font-size:15px;text-align:center;margin-top:12px;';
+
+        overlay.appendChild(header);
+        overlay.appendChild(content);
+        overlay.appendChild(controls);
+        overlay.appendChild(counter);
+
+        next.focus();
+    }
+
+    function close() {
+        document.removeEventListener('keydown', keyHandler, true);
+        if (overlay) overlay.remove();
+        overlay = null;
+    }
+
+    function keyHandler(e) {
+        if (!overlay) return;
+
+        if (e.key === 'Escape' || e.key === 'Backspace' ||
+            e.keyCode === 4 || e.keyCode === 27) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            close();
+        }
+    }
+
+    function addPage(title, url, status, data) {
+        var text = title + '\n\n';
+        text += 'URL: ' + url + '\n\n';
+        text += 'Результат: ' + status + '\n\n';
+
+        if (data !== undefined) {
+            text += 'Ответ:\n';
+
+            if (typeof data === 'string') {
+                text += data.substring(0, 1800);
+            } else {
+                try {
+                    text += JSON.stringify(data, null, 2)
+                        .substring(0, 1800);
+                } catch (e) {
+                    text += String(data);
+                }
             }
         }
 
-        document.addEventListener('keydown', keys, true);
-        close.onclick = remove;
-        close.focus();
+        pages.push(text);
+        current = pages.length - 1;
+        render();
+    }
+
+    function test(url, title, next) {
+        var req = new Lampa.Reguest();
+        req.timeout(20000);
+
+        var completed = false;
+
+        function finish(status, data) {
+            if (completed) return;
+            completed = true;
+            addPage(title, url, status, data);
+            if (next) next();
+        }
+
+        try {
+            req.native(
+                url,
+                function (data) {
+                    finish('SUCCESS', data);
+                },
+                function (error) {
+                    finish('ERROR', error);
+                },
+                false,
+                { dataType: 'text' }
+            );
+        } catch (e) {
+            finish('EXCEPTION', e.message);
+        }
     }
 
     function runTests() {
-        var results = [
-            'KP NETWORK TEST 1.0',
-            'Проверка нативного HTTP Lampa',
-            '==============================',
-            ''
-        ];
+        pages = [];
+        current = 0;
 
-        showReport('Запуск тестов...\nПодожди завершения запросов.');
+        overlay = document.createElement('div');
+        overlay.style.cssText =
+            'position:fixed;z-index:2147483647;' +
+            'inset:0;background:#151515;color:white;' +
+            'padding:25px;box-sizing:border-box;' +
+            'display:flex;flex-direction:column;';
 
-        function finish() {
-            showReport(results.join('\n'));
-        }
+        document.body.appendChild(overlay);
+        document.addEventListener('keydown', keyHandler, true);
 
-        function test(url, name, next) {
-            results.push('Проверка: ' + name);
-            results.push('URL: ' + url);
-
-            var req = new Lampa.Reguest();
-            req.timeout(20000);
-
-            var done = false;
-
-            function complete(status, data) {
-                if (done) return;
-                done = true;
-
-                results.push('Результат: ' + status);
-
-                if (data !== undefined) {
-                    var output;
-
-                    try {
-                        output = typeof data === 'string'
-                            ? data
-                            : JSON.stringify(data);
-                    } catch (e) {
-                        output = String(data);
-                    }
-
-                    results.push(
-                        'Ответ: ' + String(output).substring(0, 600)
-                    );
-                }
-
-                results.push('');
-                next();
-            }
-
-            try {
-                req.native(
-                    url,
-                    function (data) {
-                        complete('SUCCESS', data);
-                    },
-                    function (error) {
-                        var message;
-
-                        try {
-                            message = JSON.stringify(error);
-                        } catch (e) {
-                            message = String(error);
-                        }
-
-                        complete('ERROR', message);
-                    },
-                    false,
-                    { dataType: 'text' }
-                );
-            } catch (e) {
-                complete('EXCEPTION', e.message);
-            }
-        }
+        pages.push('Запускаем проверку HTTPBin...');
+        render();
 
         test(
             'https://httpbin.org/json',
-            'Контрольный сервер HTTPBin',
+            'ТЕСТ 1. HTTPBIN',
             function () {
                 test(
                     'https://www.kinopoisk.ru/',
-                    'Сайт Кинопоиска',
-                    finish
+                    'ТЕСТ 2. KINOPOISK',
+                    function () {
+                        pages.push(
+                            'ВСЕ ТЕСТЫ ЗАВЕРШЕНЫ\n\n' +
+                            'Передай мне результаты обеих проверок.'
+                        );
+                        render();
+                    }
                 );
             }
         );
@@ -145,7 +187,7 @@
         var item = $(
             '<li id="kp-network-test" class="menu__item selector">' +
             '<div class="menu__ico">KP</div>' +
-            '<div class="menu__text">KP Network Test</div>' +
+            '<div class="menu__text">KP Network Test 1.1</div>' +
             '</li>'
         );
 
